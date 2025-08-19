@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PDF多页盖章工具 - 在线版</title>
+    <link rel="stylesheet" href="styles.css" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  </head>
+  <body>
+    <div class="container">
+      <header>
+        <h1>PDF多页盖章工具</h1>
+        <p>在线为PDF文档添加印章，支持多页面操作</p>
+      </header>
+
+      <div class="main-content">
+        <!-- 左侧控制面板 -->
+        <div class="control-panel">
+          <!-- 文件上传区域 -->
+          <div class="upload-section">
+            <h3>文件选择</h3>
+            <div class="file-input-group">
+              <label for="pdf-input" class="file-label">
+                <span class="file-icon">📄</span>
+                选择PDF文件
+              </label>
+              <input
+                type="file"
+                id="pdf-input"
+                accept=".pdf"
+                style="display: none"
+              />
+              <span id="pdf-name" class="file-name">未选择文件</span>
+            </div>
+
+            <div class="file-input-group">
+              <label for="stamp-input" class="file-label">
+                <span class="file-icon">🖼️</span>
+                选择印章图片
+              </label>
+              <input
+                type="file"
+                id="stamp-input"
+                accept="image/*"
+                style="display: none"
+              />
+              <span id="stamp-name" class="file-name">未选择文件</span>
+            </div>
+          </div>
+
+          <!-- 页面导航 -->
+          <div class="navigation-section">
+            <h3>页面导航</h3>
+            <div class="page-controls">
+              <button id="prev-page" class="nav-btn" disabled>上一页</button>
+              <span id="page-info">0 / 0</span>
+              <button id="next-page" class="nav-btn" disabled>下一页</button>
+            </div>
+          </div>
+
+          <!-- 印章设置 -->
+          <div class="stamp-settings">
+            <h3>印章设置</h3>
+            <div class="setting-group">
+              <label for="stamp-size">印章大小 (0.01-1.0):</label>
+              <input
+                type="number"
+                id="stamp-size"
+                min="0.01"
+                max="1.0"
+                step="0.01"
+                value="0.22"
+              />
+            </div>
+            <div class="setting-group">
+              <button id="add-stamp" class="action-btn" disabled>
+                添加印章到当前页
+              </button>
+            </div>
+          </div>
+
+          <!-- 印章列表 -->
+          <div class="stamp-list-section">
+            <h3>当前页印章</h3>
+            <div class="stamp-actions">
+              <button id="delete-stamp" class="action-btn secondary" disabled>
+                删除选中印章
+              </button>
+              <button id="clear-stamps" class="action-btn secondary" disabled>
+                清空当前页
+              </button>
+            </div>
+            <ul id="stamp-list" class="stamp-list"></ul>
+          </div>
+
+          <!-- 导出区域 -->
+          <div class="export-section">
+            <h3>导出PDF</h3>
+            <button id="save-pdf" class="action-btn primary" disabled>
+              保存盖章PDF
+            </button>
+            <div
+              id="progress-container"
+              class="progress-container"
+              style="display: none"
+            >
+              <div class="progress-bar">
+                <div id="progress-fill" class="progress-fill"></div>
+              </div>
+              <span id="progress-text">处理中...</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 右侧预览区域 -->
+        <div class="preview-panel">
+          <div class="preview-header">
+            <h3>PDF预览</h3>
+            <div class="zoom-controls">
+              <button id="zoom-out" class="zoom-btn">-</button>
+              <span id="zoom-level">100%</span>
+              <button id="zoom-in" class="zoom-btn">+</button>
+            </div>
+          </div>
+          <div class="preview-container">
+            <canvas id="pdf-canvas" class="pdf-canvas"></canvas>
+            <div id="stamp-overlay" class="stamp-overlay"></div>
+            <div id="drop-zone" class="drop-zone">
+              <div class="drop-message">
+                <span class="drop-icon">📄</span>
+                <p>拖拽PDF文件到此处<br />或点击左侧按钮选择文件</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>
