@@ -16,7 +16,7 @@
 
 ## 🚀 在线使用
 
-访问部署地址：[https://your-username.github.io/pdf-stamp-tool](https://your-username.github.io/pdf-stamp-tool)
+访问部署地址：[https://osugabin.github.io/stamp/)
 
 ## 📖 使用说明
 
