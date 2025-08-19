@@ -372,13 +372,6 @@ header p {
   border: 1px solid #ccc;
   cursor: crosshair;
   display: block;
-  /* 优化PDF渲染清晰度 */
-  image-rendering: -webkit-optimize-contrast;
-  image-rendering: -moz-crisp-edges;
-  image-rendering: pixelated;
-  image-rendering: crisp-edges;
-  /* 禁用浏览器的图像平滑 */
-  -ms-interpolation-mode: nearest-neighbor;
 }
 
 .stamp-overlay {
@@ -412,13 +405,6 @@ header p {
   height: 100%;
   object-fit: contain;
   border-radius: 2px;
-  /* 保持图像清晰度，避免模糊 */
-  image-rendering: -webkit-optimize-contrast;
-  image-rendering: -moz-crisp-edges;
-  image-rendering: pixelated;
-  image-rendering: crisp-edges;
-  /* 禁用浏览器的图像平滑 */
-  -ms-interpolation-mode: nearest-neighbor;
 }
 
 /* 拖拽区域 */

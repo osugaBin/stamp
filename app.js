@@ -92,15 +92,6 @@ class PDFStampTool {
 
     // 印章拖拽事件
     this.setupStampDragging();
-
-    // 窗口大小改变时重新计算缩放比例
-    window.addEventListener("resize", () => {
-      if (this.pdfDoc) {
-        this.calculateInitialScale().then(() => {
-          this.renderPage();
-        });
-      }
-    });
   }
 
   setupDragAndDrop() {
@@ -165,9 +156,6 @@ class PDFStampTool {
       this.currentPage = 1;
       this.stamps = {}; // 重置印章数据
 
-      // 计算适合容器的初始缩放比例
-      await this.calculateInitialScale();
-
       this.updatePageInfo();
       this.updateNavigationButtons();
       await this.renderPage();
@@ -177,35 +165,6 @@ class PDFStampTool {
     } catch (error) {
       console.error("PDF加载失败:", error);
       alert("PDF文件加载失败，请检查文件格式");
-    }
-  }
-
-  async calculateInitialScale() {
-    if (!this.pdfDoc) return;
-    
-    try {
-      const page = await this.pdfDoc.getPage(1);
-      const viewport = page.getViewport({ scale: 1.0 });
-      
-      // 获取预览容器的可用空间
-      const container = this.elements.canvas.parentElement;
-      const containerWidth = container.clientWidth - 40; // 减去padding
-      const containerHeight = container.clientHeight - 40; // 减去padding
-      
-      // 计算适合容器的缩放比例
-      const scaleX = containerWidth / viewport.width;
-      const scaleY = containerHeight / viewport.height;
-      
-      // 选择较小的缩放比例以确保PDF完全显示在容器内
-      this.scale = Math.min(scaleX, scaleY, 2.0); // 最大不超过2倍
-      
-      // 确保最小缩放比例
-      this.scale = Math.max(this.scale, 0.3);
-      
-      this.updateZoomLevel();
-    } catch (error) {
-      console.error("计算初始缩放比例失败:", error);
-      this.scale = 1.0; // 使用默认缩放比例
     }
   }
 
@@ -231,17 +190,12 @@ class PDFStampTool {
 
   // 处理印章图片透明背景
   processStampTransparency(img) {
-    // 创建高分辨率画布，保持原始像素密度
     const canvas = document.createElement("canvas");
     const ctx = canvas.getContext("2d");
-    
-    // 保持原始尺寸，避免缩放损失
-    canvas.width = img.naturalWidth || img.width;
-    canvas.height = img.naturalHeight || img.height;
+    canvas.width = img.width;
+    canvas.height = img.height;
 
-    // 禁用图像平滑以保持像素精度
-    ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img, 0, 0);
 
     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
     const data = imageData.data;
@@ -291,11 +245,6 @@ class PDFStampTool {
     }
 
     ctx.putImageData(imageData, 0, 0);
-    
-    // 存储原始尺寸信息
-    canvas.originalWidth = canvas.width;
-    canvas.originalHeight = canvas.height;
-    
     return canvas;
   }
 
@@ -304,31 +253,19 @@ class PDFStampTool {
 
     try {
       const page = await this.pdfDoc.getPage(this.currentPage);
-      
-      // 获取设备像素比，支持高DPI显示
-      const devicePixelRatio = window.devicePixelRatio || 1;
-      const scaledViewport = page.getViewport({ scale: this.scale * devicePixelRatio });
       const viewport = page.getViewport({ scale: this.scale });
 
-      // 设置画布实际像素尺寸（高分辨率）
-      this.elements.canvas.width = scaledViewport.width;
-      this.elements.canvas.height = scaledViewport.height;
+      this.elements.canvas.width = viewport.width;
+      this.elements.canvas.height = viewport.height;
 
-      // 设置画布显示尺寸
+      // 设置画布样式以确保左对齐
       this.elements.canvas.style.width = viewport.width + "px";
       this.elements.canvas.style.height = viewport.height + "px";
 
       const context = this.elements.canvas.getContext("2d");
-      
-      // 缩放上下文以匹配设备像素比，确保清晰渲染
-      context.scale(devicePixelRatio, devicePixelRatio);
-      
-      // 禁用图像平滑以保持像素精度
-      context.imageSmoothingEnabled = false;
-      
       const renderContext = {
         canvasContext: context,
-        viewport: scaledViewport,
+        viewport: viewport,
       };
 
       await page.render(renderContext).promise;
@@ -386,13 +323,9 @@ class PDFStampTool {
 
     const size = parseFloat(this.elements.stampSize.value);
     const canvasRect = this.elements.canvas.getBoundingClientRect();
-    
-    // 使用原始图像尺寸计算，保持像素精度
-    const originalWidth = this.stampImage.naturalWidth || this.stampImage.width;
-    const originalHeight = this.stampImage.naturalHeight || this.stampImage.height;
-    
     const stampWidth = canvasRect.width * size;
-    const stampHeight = (stampWidth * originalHeight) / originalWidth;
+    const stampHeight =
+      (stampWidth * this.stampImage.height) / this.stampImage.width;
 
     // 计算居中位置
     const x = Math.max(
@@ -416,10 +349,8 @@ class PDFStampTool {
       y: y,
       width: stampWidth,
       height: stampHeight,
-      originalWidth: originalWidth,
-      originalHeight: originalHeight,
-      // 存储缩放比例，用于高质量渲染
-      scale: size
+      originalWidth: this.stampImage.width,
+      originalHeight: this.stampImage.height,
     };
 
     if (!this.stamps[this.currentPage]) {
@@ -436,9 +367,10 @@ class PDFStampTool {
 
     const rect = this.elements.canvas.getBoundingClientRect();
     // 获取PDF容器的padding偏移
-    const containerRect = this.elements.canvas.parentElement.getBoundingClientRect();
+    const containerRect =
+      this.elements.canvas.parentElement.getBoundingClientRect();
     const containerPadding = 20; // 对应CSS中的padding: 20px
-    
+
     const x = event.clientX - rect.left;
     const y = event.clientY - rect.top;
 
