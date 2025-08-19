@@ -92,6 +92,15 @@ class PDFStampTool {
 
     // 印章拖拽事件
     this.setupStampDragging();
+
+    // 窗口大小改变时重新计算缩放比例
+    window.addEventListener("resize", () => {
+      if (this.pdfDoc) {
+        this.calculateInitialScale().then(() => {
+          this.renderPage();
+        });
+      }
+    });
   }
 
   setupDragAndDrop() {
@@ -156,6 +165,9 @@ class PDFStampTool {
       this.currentPage = 1;
       this.stamps = {}; // 重置印章数据
 
+      // 计算适合容器的初始缩放比例
+      await this.calculateInitialScale();
+
       this.updatePageInfo();
       this.updateNavigationButtons();
       await this.renderPage();
@@ -165,6 +177,35 @@ class PDFStampTool {
     } catch (error) {
       console.error("PDF加载失败:", error);
       alert("PDF文件加载失败，请检查文件格式");
+    }
+  }
+
+  async calculateInitialScale() {
+    if (!this.pdfDoc) return;
+    
+    try {
+      const page = await this.pdfDoc.getPage(1);
+      const viewport = page.getViewport({ scale: 1.0 });
+      
+      // 获取预览容器的可用空间
+      const container = this.elements.canvas.parentElement;
+      const containerWidth = container.clientWidth - 40; // 减去padding
+      const containerHeight = container.clientHeight - 40; // 减去padding
+      
+      // 计算适合容器的缩放比例
+      const scaleX = containerWidth / viewport.width;
+      const scaleY = containerHeight / viewport.height;
+      
+      // 选择较小的缩放比例以确保PDF完全显示在容器内
+      this.scale = Math.min(scaleX, scaleY, 2.0); // 最大不超过2倍
+      
+      // 确保最小缩放比例
+      this.scale = Math.max(this.scale, 0.3);
+      
+      this.updateZoomLevel();
+    } catch (error) {
+      console.error("计算初始缩放比例失败:", error);
+      this.scale = 1.0; // 使用默认缩放比例
     }
   }
 
