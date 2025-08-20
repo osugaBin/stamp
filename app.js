@@ -57,50 +57,74 @@ class PDFStampTool {
 
   bindEvents() {
     // 文件上传事件
-    this.elements.pdfInput.addEventListener("change", (e) =>
-      this.handlePDFUpload(e)
-    );
-    this.elements.stampInput.addEventListener("change", (e) =>
-      this.handleStampUpload(e)
-    );
+    if (this.elements.pdfInput) {
+      this.elements.pdfInput.addEventListener("change", (e) =>
+        this.handlePDFUpload(e)
+      );
+    }
+    if (this.elements.stampInput) {
+      this.elements.stampInput.addEventListener("change", (e) =>
+        this.handleStampUpload(e)
+      );
+    }
 
     // 页面导航事件
-    this.elements.prevPage.addEventListener("click", () => this.previousPage());
-    this.elements.nextPage.addEventListener("click", () => this.nextPage());
+    if (this.elements.prevPage) {
+      this.elements.prevPage.addEventListener("click", () => this.previousPage());
+    }
+    if (this.elements.nextPage) {
+      this.elements.nextPage.addEventListener("click", () => this.nextPage());
+    }
 
     // 印章操作事件
-    this.elements.addStamp.addEventListener("click", () =>
-      this.addStampToPage()
-    );
-    this.elements.deleteStamp.addEventListener("click", () =>
-      this.deleteSelectedStamp()
-    );
-    this.elements.clearStamps.addEventListener("click", () =>
-      this.clearCurrentPageStamps()
-    );
+    if (this.elements.addStamp) {
+      this.elements.addStamp.addEventListener("click", () =>
+        this.addStampToPage()
+      );
+    }
+    if (this.elements.deleteStamp) {
+      this.elements.deleteStamp.addEventListener("click", () =>
+        this.deleteSelectedStamp()
+      );
+    }
+    if (this.elements.clearStamps) {
+      this.elements.clearStamps.addEventListener("click", () =>
+        this.clearCurrentPageStamps()
+      );
+    }
 
     // 缩放事件
-    this.elements.zoomIn.addEventListener("click", () => this.zoomIn());
-    this.elements.zoomOut.addEventListener("click", () => this.zoomOut());
+    if (this.elements.zoomIn) {
+      this.elements.zoomIn.addEventListener("click", () => this.zoomIn());
+    }
+    if (this.elements.zoomOut) {
+      this.elements.zoomOut.addEventListener("click", () => this.zoomOut());
+    }
 
     // 保存PDF事件
-    this.elements.savePdf.addEventListener("click", () => this.savePDF());
+    if (this.elements.savePdf) {
+      this.elements.savePdf.addEventListener("click", () => this.savePDF());
+    }
 
-    // 印章类型切换事件
-    this.elements.stampTypeNormal.addEventListener("change", () => {
-      if (this.elements.stampTypeNormal.checked) {
-        this.stampType = "normal";
-        // 切换到普通公章模式时，清除骑缝章但保留普通公章
-        this.clearCrossPageStamps();
-      }
-    });
-    this.elements.stampTypeCross.addEventListener("change", () => {
-      if (this.elements.stampTypeCross.checked) {
-        this.stampType = "cross-page";
-        // 切换到骑缝章模式时，保留现有普通公章
-        this.generateCrossPageStamps();
-      }
-    });
+    // 印章类型切换事件（如果元素存在）
+    if (this.elements.stampTypeNormal) {
+      this.elements.stampTypeNormal.addEventListener("change", () => {
+        if (this.elements.stampTypeNormal.checked) {
+          this.stampType = "normal";
+          // 切换到普通公章模式时，清除骑缝章但保留普通公章
+          this.clearCrossPageStamps();
+        }
+      });
+    }
+    if (this.elements.stampTypeCross) {
+      this.elements.stampTypeCross.addEventListener("change", () => {
+        if (this.elements.stampTypeCross.checked) {
+          this.stampType = "cross-page";
+          // 切换到骑缝章模式时，保留现有普通公章
+          this.generateCrossPageStamps();
+        }
+      });
+    }
 
     // 拖拽上传事件
     this.setupDragAndDrop();
@@ -319,6 +343,10 @@ class PDFStampTool {
     const stampElement = document.createElement("div");
     stampElement.className = "stamp";
     stampElement.dataset.index = index;
+    
+    // 添加拖拽相关的样式
+    stampElement.style.cursor = "move";
+    stampElement.style.userSelect = "none";
 
     if (stamp.isCrossPage && stamp.image) {
       // 骑缝章：使用canvas图像
@@ -330,12 +358,16 @@ class PDFStampTool {
       canvas.style.opacity = "0.8";
       canvas.style.width = "100%";
       canvas.style.height = "100%";
+      canvas.style.pointerEvents = "none"; // 防止canvas阻止事件
       stampElement.appendChild(canvas);
     } else {
       // 普通公章：使用img元素
       const img = document.createElement("img");
       img.src = stamp.src;
       img.style.opacity = "0.8";
+      img.style.pointerEvents = "none"; // 防止img阻止事件
+      img.style.userSelect = "none";
+      img.draggable = false; // 禁用默认拖拽
       stampElement.appendChild(img);
     }
 
@@ -344,9 +376,26 @@ class PDFStampTool {
     stampElement.style.width = stamp.width + "px";
     stampElement.style.height = stamp.height + "px";
 
+    // 点击选中印章
     stampElement.addEventListener("click", (e) => {
       e.stopPropagation();
       this.selectStamp(index);
+    });
+    
+    // 鼠标悬停效果
+    stampElement.addEventListener("mouseenter", () => {
+      if (!this.isDragging) {
+        stampElement.style.opacity = "0.9";
+        stampElement.style.transform = "scale(1.05)";
+        stampElement.style.transition = "all 0.2s ease";
+      }
+    });
+    
+    stampElement.addEventListener("mouseleave", () => {
+      if (!this.isDragging) {
+        stampElement.style.opacity = "0.8";
+        stampElement.style.transform = "scale(1)";
+      }
     });
 
     this.elements.stampOverlay.appendChild(stampElement);
@@ -405,14 +454,17 @@ class PDFStampTool {
   }
 
   handleCanvasClick(event) {
-    if (!this.stampImage || !this.pdfDoc) return;
+    // 检查是否点击在已有印章上，如果是则不添加新印章
+    if (event.target.closest('.stamp')) {
+      return;
+    }
+
+    if (!this.stampImage || !this.pdfDoc) {
+      alert('请先上传PDF文件和印章图片');
+      return;
+    }
 
     const rect = this.elements.canvas.getBoundingClientRect();
-    // 获取PDF容器的padding偏移
-    const containerRect =
-      this.elements.canvas.parentElement.getBoundingClientRect();
-    const containerPadding = 20; // 对应CSS中的padding: 20px
-
     const x = event.clientX - rect.left;
     const y = event.clientY - rect.top;
 
@@ -421,7 +473,7 @@ class PDFStampTool {
     const stampHeight =
       (stampWidth * this.stampImage.height) / this.stampImage.width;
 
-    // 边界检查
+    // 边界检查，确保印章完全在画布内
     const finalX = Math.max(
       0,
       Math.min(x - stampWidth / 2, rect.width - stampWidth)
@@ -448,6 +500,10 @@ class PDFStampTool {
     this.stamps[this.currentPage].push(stamp);
     this.renderStamps();
     this.updateButtonStates();
+    
+    // 自动选中新添加的印章
+    const newStampIndex = this.stamps[this.currentPage].length - 1;
+    this.selectStamp(newStampIndex);
   }
 
   startDrag(event) {
@@ -462,6 +518,15 @@ class PDFStampTool {
       x: event.clientX - rect.left,
       y: event.clientY - rect.top,
     };
+
+    // 拖拽时的视觉效果
+    stampElement.style.opacity = "0.7";
+    stampElement.style.transform = "scale(1.1)";
+    stampElement.style.zIndex = "1000";
+    stampElement.style.transition = "none"; // 拖拽时禁用过渡动画
+    
+    // 改变鼠标样式
+    document.body.style.cursor = "grabbing";
 
     this.selectStamp(this.selectedStamp);
     event.preventDefault();
@@ -506,6 +571,22 @@ class PDFStampTool {
   }
 
   endDrag() {
+    if (this.isDragging && this.selectedStamp !== null) {
+      // 恢复被拖拽印章的样式
+      const stampElements = this.elements.stampOverlay.querySelectorAll('.stamp');
+      const draggedElement = stampElements[this.selectedStamp];
+      
+      if (draggedElement) {
+        draggedElement.style.opacity = "0.8";
+        draggedElement.style.transform = "scale(1)";
+        draggedElement.style.zIndex = "auto";
+        draggedElement.style.transition = "all 0.2s ease";
+      }
+      
+      // 恢复鼠标样式
+      document.body.style.cursor = "auto";
+    }
+    
     this.isDragging = false;
   }
 
