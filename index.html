@@ -64,6 +64,30 @@
           <div class="stamp-settings">
             <h3>印章设置</h3>
             <div class="setting-group">
+              <label>印章类型:</label>
+              <div class="stamp-type-options">
+                <label class="radio-label">
+                  <input
+                    type="radio"
+                    name="stamp-type"
+                    value="normal"
+                    id="stamp-type-normal"
+                    checked
+                  />
+                  <span class="radio-text">普通公章</span>
+                </label>
+                <label class="radio-label">
+                  <input
+                    type="radio"
+                    name="stamp-type"
+                    value="cross-page"
+                    id="stamp-type-cross"
+                  />
+                  <span class="radio-text">骑缝章</span>
+                </label>
+              </div>
+            </div>
+            <div class="setting-group">
               <label for="stamp-size">印章大小 (0.01-1.0):</label>
               <input
                 type="number"
