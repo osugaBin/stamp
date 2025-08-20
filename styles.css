@@ -41,7 +41,7 @@ header p {
 /* 主要内容区域 */
 .main-content {
   display: grid;
-  grid-template-columns: 350px 1fr 200px;
+  grid-template-columns: 320px 1fr 280px;
   gap: 20px;
   height: calc(100vh - 80px);
   padding: 20px;
