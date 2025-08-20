@@ -2,10 +2,14 @@
 
 一个基于 Web 的 PDF 多页盖章工具，支持在线为 PDF 文档添加印章，无需安装任何软件。
 
+## 🚀 在线使用
+
+访问部署地址：[https://osugabin.github.io/stamp](https://osugabin.github.io/stamp) 或 [stamp.pzyt.top](https://stamp.pzyt.top)
+
 ## 🌟 功能特点
 
 - **📄 PDF 文件支持**: 支持上传和处理多页 PDF 文档
-- **🖼️ 印章管理**: 支持上传各种格式的印章图片（PNG、JPG、GIF 等）
+- **🖼️ 印章管理**: 支持上传各种格式的印章图片（PNG、JPG、GIF 等），白底图片即可
 - **🎯 精确定位**: 点击或拖拽方式精确放置印章位置
 - **📏 尺寸调整**: 灵活调整印章大小（0.01-1.0 倍缩放）
 - **📱 响应式设计**: 完美适配桌面端和移动端设备
@@ -13,10 +17,6 @@
 - **💾 在线导出**: 直接在浏览器中生成带印章的 PDF 文件
 - **🎨 现代化 UI**: 美观的渐变色界面设计
 - **⚡ 边界检查**: 自动防止印章超出页面边界
-
-## 🚀 在线使用
-
-访问部署地址：[https://your-username.github.io/pdf-stamp-tool](https://your-username.github.io/pdf-stamp-tool)
 
 ## 📖 使用说明
 
@@ -80,9 +80,9 @@ pdf-stamp-tool/
 
 1. 克隆项目
 
-```bash
-git clone https://github.com/your-username/pdf-stamp-tool.git
-cd pdf-stamp-tool
+```
+git clone https://github.com/osugaBin/stamp.git
+cd stamp
 ```
 
 2. 启动本地服务器
@@ -153,5 +153,29 @@ MIT License - 详见 [LICENSE](LICENSE) 文件
 - [Cloudflare Pages](https://pages.cloudflare.com/) - 全球 CDN 加速
 
 ---
+
+## ☕ 支持开发
+
+如果这个项目对您有帮助，欢迎请我喝杯咖啡！
+
+<div align="center">
+  <img src="buycof.png" alt="Buy me a coffee" width="200"/>
+  <br/><br/>
+  
+  <table>
+    <tr>
+      <td align="center">
+        <img src="Ali$.jpg" alt="支付宝收款码" width="150"/>
+        <br/>
+        <b>Buy me a coffee</b>
+      </td>
+      <td align="center">
+        <img src="Wx$.jpg" alt="微信收款码" width="150"/>
+        <br/>
+        <b>请我喝咖啡</b>
+      </td>
+    </tr>
+  </table>
+</div>
 
 如果这个项目对您有帮助，请给个 ⭐️ 支持一下！

@@ -41,9 +41,12 @@ header p {
 /* 主要内容区域 */
 .main-content {
   display: grid;
-  grid-template-columns: 350px 1fr;
-  gap: 30px;
-  height: calc(100vh - 200px);
+  grid-template-columns: 350px 1fr 200px;
+  gap: 20px;
+  height: calc(100vh - 80px);
+  padding: 20px;
+  max-width: 1600px;
+  margin: 0 auto;
 }
 
 /* 左侧控制面板 */
@@ -459,6 +462,62 @@ header p {
   }
 }
 
+/* 收款二维码区域样式 */
+.donation-panel {
+  background: white;
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  height: fit-content;
+}
+
+.coffee-icon {
+  width: 100%;
+  max-width: 160px;
+  height: auto;
+  display: block;
+  margin: 0 auto 15px auto;
+}
+
+.donation-panel h3 {
+  margin: 0;
+  color: #333;
+  font-size: 16px;
+  text-align: center;
+  border-bottom: 2px solid #f0f0f0;
+  padding-bottom: 10px;
+}
+
+.donation-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.qr-code {
+  max-width: 120px;
+  height: auto;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  transition: transform 0.2s ease;
+}
+
+.qr-code:hover {
+  transform: scale(1.05);
+}
+
+.donation-text {
+  margin: 0;
+  font-size: 12px;
+  color: #666;
+  text-align: center;
+  font-weight: 500;
+}
+
 @media (max-width: 768px) {
   .container {
     padding: 10px;
@@ -478,6 +537,32 @@ header p {
   .preview-panel {
     order: 1;
     min-height: 400px;
+  }
+
+  .donation-panel {
+    order: 3;
+    flex-direction: row;
+    justify-content: center;
+    padding: 15px;
+  }
+
+  .coffee-icon {
+    width: 100%;
+    max-width: 120px;
+    margin-bottom: 10px;
+  }
+
+  .donation-item {
+    gap: 8px;
+  }
+
+  .qr-code {
+    max-width: 80px;
+    height: auto;
+  }
+
+  .donation-text {
+    font-size: 11px;
   }
 
   header h1 {
