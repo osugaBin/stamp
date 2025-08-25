@@ -170,12 +170,12 @@ MIT License - 详见 [LICENSE](LICENSE) 文件
   <table>
     <tr>
       <td align="center">
-        <img src="Ali$.jpg" alt="支付宝收款码" width="150"/>
+        <img src="$Ali.png" alt="支付宝收款码" width="150"/>
         <br/>
         <b>Buy me a coffee</b>
       </td>
       <td align="center">
-        <img src="Wx$.jpg" alt="微信收款码" width="150"/>
+        <img src="$wx.png" alt="微信收款码" width="150"/>
         <br/>
         <b>请我喝咖啡</b>
       </td>
