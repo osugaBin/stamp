@@ -4,7 +4,7 @@
 
 ## 🚀 在线使用
 
-访问部署地址：[https://osugabin.github.io/stamp](https://osugabin.github.io/stamp) 或 [stamp.pzyt.top](https://stamp.pzyt.top)
+访问部署地址：[https://osugabin.github.io/stamp](https://osugabin.github.io/stamp) 或 [stamp.drbin.top](https://stamp.drbin.top)
 
 ## 🌟 功能特点
 
