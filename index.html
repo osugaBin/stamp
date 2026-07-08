@@ -50,7 +50,7 @@
             </div>
           </div>
 
-          <!-- 页面导航 -->
+          <!-- 页面导航（滚动到指定页） -->
           <div class="navigation-section">
             <h3>页面导航</h3>
             <div class="page-controls">
@@ -64,6 +64,17 @@
           <div class="stamp-settings">
             <h3>印章设置</h3>
             <div class="setting-group">
+              <label>印章类型：</label>
+              <div class="stamp-type-toggle">
+                <button id="stamp-type-normal" class="stamp-type-btn active">
+                  🏷️ 普通公章
+                </button>
+                <button id="stamp-type-cross" class="stamp-type-btn">
+                  📎 骑缝章
+                </button>
+              </div>
+            </div>
+            <div class="setting-group">
               <label for="stamp-size">印章大小 (0.01-1.0):</label>
               <input
                 type="number"
@@ -75,8 +86,19 @@
               />
             </div>
             <div class="setting-group">
+              <label for="stamp-rotation">旋转角度 (°):</label>
+              <input
+                type="number"
+                id="stamp-rotation"
+                min="-360"
+                max="360"
+                step="1"
+                value="0"
+              />
+            </div>
+            <div class="setting-group">
               <button id="add-stamp" class="action-btn" disabled>
-                添加印章到当前页
+                添加印章
               </button>
             </div>
           </div>
@@ -117,16 +139,15 @@
         <!-- 右侧预览区域 -->
         <div class="preview-panel">
           <div class="preview-header">
-            <h3>PDF预览</h3>
+            <h3>PDF预览（滚动查看所有页面）</h3>
             <div class="zoom-controls">
               <button id="zoom-out" class="zoom-btn">-</button>
               <span id="zoom-level">100%</span>
               <button id="zoom-in" class="zoom-btn">+</button>
             </div>
           </div>
-          <div class="preview-container">
-            <canvas id="pdf-canvas" class="pdf-canvas"></canvas>
-            <div id="stamp-overlay" class="stamp-overlay"></div>
+          <div class="preview-container" id="preview-scroll">
+            <div id="pages-wrapper" class="pages-wrapper"></div>
             <div id="drop-zone" class="drop-zone">
               <div class="drop-message">
                 <span class="drop-icon">📄</span>

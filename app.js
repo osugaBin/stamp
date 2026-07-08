@@ -9,9 +9,13 @@ class PDFStampTool {
     this.stampImage = null;
     this.stamps = {}; // 存储每页的印章 {pageNum: [stamps]}
     this.selectedStamp = null;
+    this.selectedPage = null; // 选中印章所在的页码
     this.isDragging = false;
+    this.isRotating = false;
     this.dragOffset = { x: 0, y: 0 };
-    this.stampType = "normal"; // 印章类型：normal(普通公章) 或 cross-page(骑缝章)
+    this.rotateCenter = { x: 0, y: 0 };
+    this.rotateStartAngle = 0;
+    this.stampType = "normal"; // 印章类型：normal(普通公章) 或 cross(骑缝章)
     this.crossPageStamps = []; // 存储骑缝章的分割片段
 
     this.initializeElements();
@@ -20,7 +24,6 @@ class PDFStampTool {
   }
 
   initializeElements() {
-    // 获取DOM元素
     this.elements = {
       pdfInput: document.getElementById("pdf-input"),
       stampInput: document.getElementById("stamp-input"),
@@ -30,6 +33,7 @@ class PDFStampTool {
       nextPage: document.getElementById("next-page"),
       pageInfo: document.getElementById("page-info"),
       stampSize: document.getElementById("stamp-size"),
+      stampRotation: document.getElementById("stamp-rotation"),
       addStamp: document.getElementById("add-stamp"),
       deleteStamp: document.getElementById("delete-stamp"),
       clearStamps: document.getElementById("clear-stamps"),
@@ -38,8 +42,8 @@ class PDFStampTool {
       progressContainer: document.getElementById("progress-container"),
       progressFill: document.getElementById("progress-fill"),
       progressText: document.getElementById("progress-text"),
-      canvas: document.getElementById("pdf-canvas"),
-      stampOverlay: document.getElementById("stamp-overlay"),
+      pagesWrapper: document.getElementById("pages-wrapper"),
+      previewScroll: document.getElementById("preview-scroll"),
       dropZone: document.getElementById("drop-zone"),
       zoomIn: document.getElementById("zoom-in"),
       zoomOut: document.getElementById("zoom-out"),
@@ -50,7 +54,6 @@ class PDFStampTool {
   }
 
   setupPDFJS() {
-    // 设置PDF.js worker
     pdfjsLib.GlobalWorkerOptions.workerSrc =
       "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
   }
@@ -68,12 +71,12 @@ class PDFStampTool {
       );
     }
 
-    // 页面导航事件
+    // 页面导航事件（滚动到对应页）
     if (this.elements.prevPage) {
-      this.elements.prevPage.addEventListener("click", () => this.previousPage());
+      this.elements.prevPage.addEventListener("click", () => this.scrollToPrevPage());
     }
     if (this.elements.nextPage) {
-      this.elements.nextPage.addEventListener("click", () => this.nextPage());
+      this.elements.nextPage.addEventListener("click", () => this.scrollToNextPage());
     }
 
     // 印章操作事件
@@ -93,6 +96,25 @@ class PDFStampTool {
       );
     }
 
+    // 旋转角度输入事件
+    if (this.elements.stampRotation) {
+      this.elements.stampRotation.addEventListener("input", () =>
+        this.updateSelectedStampRotation()
+      );
+    }
+
+    // 印章类型切换按钮
+    if (this.elements.stampTypeNormal) {
+      this.elements.stampTypeNormal.addEventListener("click", () =>
+        this.switchStampType("normal")
+      );
+    }
+    if (this.elements.stampTypeCross) {
+      this.elements.stampTypeCross.addEventListener("click", () =>
+        this.switchStampType("cross")
+      );
+    }
+
     // 缩放事件
     if (this.elements.zoomIn) {
       this.elements.zoomIn.addEventListener("click", () => this.zoomIn());
@@ -106,36 +128,18 @@ class PDFStampTool {
       this.elements.savePdf.addEventListener("click", () => this.savePDF());
     }
 
-    // 印章类型切换事件（如果元素存在）
-    if (this.elements.stampTypeNormal) {
-      this.elements.stampTypeNormal.addEventListener("change", () => {
-        if (this.elements.stampTypeNormal.checked) {
-          this.stampType = "normal";
-          // 切换到普通公章模式时，清除骑缝章但保留普通公章
-          this.clearCrossPageStamps();
-        }
-      });
-    }
-    if (this.elements.stampTypeCross) {
-      this.elements.stampTypeCross.addEventListener("change", () => {
-        if (this.elements.stampTypeCross.checked) {
-          this.stampType = "cross-page";
-          // 切换到骑缝章模式时，保留现有普通公章
-          this.generateCrossPageStamps();
-        }
-      });
+    // 监听滚动以更新当前页
+    if (this.elements.previewScroll) {
+      this.elements.previewScroll.addEventListener("scroll", () =>
+        this.onPreviewScroll()
+      );
     }
 
     // 拖拽上传事件
     this.setupDragAndDrop();
 
-    // 画布点击事件
-    this.elements.canvas.addEventListener("click", (e) =>
-      this.handleCanvasClick(e)
-    );
-
-    // 印章拖拽事件
-    this.setupStampDragging();
+    // 印章交互事件（委托到 pages-wrapper）
+    this.setupStampInteraction();
   }
 
   setupDragAndDrop() {
@@ -168,14 +172,57 @@ class PDFStampTool {
     });
   }
 
-  setupStampDragging() {
-    this.elements.stampOverlay.addEventListener("mousedown", (e) =>
-      this.startDrag(e)
-    );
-    document.addEventListener("mousemove", (e) => this.drag(e));
-    document.addEventListener("mouseup", () => this.endDrag());
+  setupStampInteraction() {
+    const wrapper = this.elements.pagesWrapper;
+
+    // mousedown: 开始拖拽/旋转
+    wrapper.addEventListener("mousedown", (e) => this.startDrag(e));
+
+    // mousemove: 拖拽/旋转中
+    document.addEventListener("mousemove", (e) => {
+      if (this.isDragging) {
+        this.drag(e);
+      } else if (this.isRotating) {
+        this.rotate(e);
+      }
+    });
+
+    // mouseup: 结束拖拽/旋转
+    document.addEventListener("mouseup", () => {
+      this.endDrag();
+      this.endRotate();
+    });
+
+    // click: 在canvas空白处添加印章
+    wrapper.addEventListener("click", (e) => this.handleCanvasClick(e));
   }
 
+  // ============= 印章类型切换 =============
+  switchStampType(type) {
+    if (type === "normal") {
+      this.stampType = "normal";
+      this.elements.stampTypeNormal.classList.add("active");
+      this.elements.stampTypeCross.classList.remove("active");
+      this.elements.addStamp.textContent = "添加印章到当前页";
+      // 切换到普通公章时，清除骑缝章
+      this.clearCrossPageStamps();
+    } else {
+      if (!this.stampImage || !this.pdfDoc) {
+        alert("请先上传PDF文件和印章图片");
+        return;
+      }
+      this.stampType = "cross";
+      this.elements.stampTypeCross.classList.add("active");
+      this.elements.stampTypeNormal.classList.remove("active");
+      this.elements.addStamp.textContent = "生成骑缝章（所有页）";
+      // 生成骑缝章
+      this.generateCrossPageStamps();
+      this.renderAllStamps();
+      this.updateButtonStates();
+    }
+  }
+
+  // ============= 文件处理 =============
   async handlePDFUpload(event) {
     const file = event.target.files[0];
     if (file && file.type === "application/pdf") {
@@ -198,11 +245,13 @@ class PDFStampTool {
       this.pdfDoc = await pdfjsLib.getDocument(arrayBuffer).promise;
       this.totalPages = this.pdfDoc.numPages;
       this.currentPage = 1;
-      this.stamps = {}; // 重置印章数据
+      this.stamps = {};
+      this.selectedStamp = null;
+      this.selectedPage = null;
 
       this.updatePageInfo();
       this.updateNavigationButtons();
-      await this.renderPage();
+      await this.renderAllPages();
 
       this.elements.dropZone.classList.add("hidden");
       this.elements.savePdf.disabled = false;
@@ -217,9 +266,7 @@ class PDFStampTool {
     reader.onload = (e) => {
       this.stampImage = new Image();
       this.stampImage.onload = () => {
-        // 处理印章透明背景
         const processedCanvas = this.processStampTransparency(this.stampImage);
-        // 创建新的图片对象使用处理后的数据
         const processedImage = new Image();
         processedImage.onload = () => {
           this.stampImage = processedImage;
@@ -232,7 +279,6 @@ class PDFStampTool {
     reader.readAsDataURL(file);
   }
 
-  // 处理印章图片透明背景
   processStampTransparency(img) {
     const canvas = document.createElement("canvas");
     const ctx = canvas.getContext("2d");
@@ -244,47 +290,25 @@ class PDFStampTool {
     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
     const data = imageData.data;
 
-    // 将白色背景设为透明并增强对比度和饱和度
     for (let i = 0; i < data.length; i += 4) {
       const r = data[i];
       const g = data[i + 1];
       const b = data[i + 2];
 
-      // 检测白色或接近白色的像素
       if (r > 240 && g > 240 && b > 240) {
-        data[i + 3] = 0; // 设为透明
+        data[i + 3] = 0;
       } else {
-        // 增强对比度 (contrast factor: 1.3)
         const contrastFactor = 1.3;
         const intercept = 128 * (1 - contrastFactor);
-
         data[i] = Math.max(0, Math.min(255, r * contrastFactor + intercept));
-        data[i + 1] = Math.max(
-          0,
-          Math.min(255, g * contrastFactor + intercept)
-        );
-        data[i + 2] = Math.max(
-          0,
-          Math.min(255, b * contrastFactor + intercept)
-        );
+        data[i + 1] = Math.max(0, Math.min(255, g * contrastFactor + intercept));
+        data[i + 2] = Math.max(0, Math.min(255, b * contrastFactor + intercept));
 
-        // 增强饱和度
-        const gray =
-          0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+        const gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
         const saturationFactor = 2.0;
-
-        data[i] = Math.max(
-          0,
-          Math.min(255, gray + saturationFactor * (data[i] - gray))
-        );
-        data[i + 1] = Math.max(
-          0,
-          Math.min(255, gray + saturationFactor * (data[i + 1] - gray))
-        );
-        data[i + 2] = Math.max(
-          0,
-          Math.min(255, gray + saturationFactor * (data[i + 2] - gray))
-        );
+        data[i] = Math.max(0, Math.min(255, gray + saturationFactor * (data[i] - gray)));
+        data[i + 1] = Math.max(0, Math.min(255, gray + saturationFactor * (data[i + 1] - gray)));
+        data[i + 2] = Math.max(0, Math.min(255, gray + saturationFactor * (data[i + 2] - gray)));
       }
     }
 
@@ -292,83 +316,132 @@ class PDFStampTool {
     return canvas;
   }
 
-  async renderPage() {
+  // ============= 渲染全部页面 =============
+  async renderAllPages() {
     if (!this.pdfDoc) return;
 
-    try {
-      const page = await this.pdfDoc.getPage(this.currentPage);
-      const viewport = page.getViewport({ scale: this.scale });
+    const wrapper = this.elements.pagesWrapper;
+    wrapper.innerHTML = "";
 
-      this.elements.canvas.width = viewport.width;
-      this.elements.canvas.height = viewport.height;
-
-      // 设置画布样式以确保左对齐
-      this.elements.canvas.style.width = viewport.width + "px";
-      this.elements.canvas.style.height = viewport.height + "px";
-
-      const context = this.elements.canvas.getContext("2d");
-      const renderContext = {
-        canvasContext: context,
-        viewport: viewport,
-      };
-
-      await page.render(renderContext).promise;
-
-      // 更新印章覆盖层尺寸和位置，确保与PDF画布完全对齐
-      this.elements.stampOverlay.style.width = viewport.width + "px";
-      this.elements.stampOverlay.style.height = viewport.height + "px";
-      this.elements.stampOverlay.style.left = "20px"; // 对应容器的padding
-      this.elements.stampOverlay.style.top = "20px"; // 对应容器的padding
-
-      // 渲染当前页的印章
-      this.renderStamps();
-    } catch (error) {
-      console.error("页面渲染失败:", error);
+    for (let pageNum = 1; pageNum <= this.totalPages; pageNum++) {
+      const pageItem = await this.createPageItem(pageNum);
+      wrapper.appendChild(pageItem);
     }
+
+    // 渲染所有页的印章
+    this.renderAllStamps();
   }
 
-  renderStamps() {
-    // 清空现有印章
-    this.elements.stampOverlay.innerHTML = "";
+  async createPageItem(pageNum) {
+    const page = await this.pdfDoc.getPage(pageNum);
+    const viewport = page.getViewport({ scale: this.scale });
 
-    const pageStamps = this.stamps[this.currentPage] || [];
-    pageStamps.forEach((stamp, index) => {
-      this.createStampElement(stamp, index);
-    });
+    // 创建页面容器
+    const pageItem = document.createElement("div");
+    pageItem.className = "page-item";
+    pageItem.dataset.page = pageNum;
+    pageItem.style.width = viewport.width + "px";
+    pageItem.style.height = viewport.height + "px";
 
+    // 页号标签
+    const label = document.createElement("div");
+    label.className = "page-label";
+    label.textContent = `第 ${pageNum} 页`;
+    pageItem.appendChild(label);
+
+    // Canvas
+    const canvas = document.createElement("canvas");
+    canvas.className = "pdf-canvas";
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+    canvas.style.width = viewport.width + "px";
+    canvas.style.height = viewport.height + "px";
+    canvas.dataset.page = pageNum;
+
+    const context = canvas.getContext("2d");
+    await page.render({ canvasContext: context, viewport: viewport }).promise;
+    pageItem.appendChild(canvas);
+
+    // 印章覆盖层
+    const overlay = document.createElement("div");
+    overlay.className = "page-stamp-overlay";
+    overlay.dataset.page = pageNum;
+    pageItem.appendChild(overlay);
+
+    return pageItem;
+  }
+
+  // ============= 印章渲染 =============
+  renderAllStamps() {
+    for (let pageNum = 1; pageNum <= this.totalPages; pageNum++) {
+      this.renderPageStamps(pageNum);
+    }
     this.updateStampList();
   }
 
-  createStampElement(stamp, index) {
+  renderPageStamps(pageNum) {
+    const overlay = this.getPageOverlay(pageNum);
+    if (!overlay) return;
+
+    overlay.innerHTML = "";
+    const pageStamps = this.stamps[pageNum] || [];
+    pageStamps.forEach((stamp, index) => {
+      this.createStampElement(stamp, index, pageNum, overlay);
+    });
+  }
+
+  getPageOverlay(pageNum) {
+    return this.elements.pagesWrapper.querySelector(
+      `.page-stamp-overlay[data-page="${pageNum}"]`
+    );
+  }
+
+  getPageCanvas(pageNum) {
+    return this.elements.pagesWrapper.querySelector(
+      `.pdf-canvas[data-page="${pageNum}"]`
+    );
+  }
+
+  getPageItem(pageNum) {
+    return this.elements.pagesWrapper.querySelector(
+      `.page-item[data-page="${pageNum}"]`
+    );
+  }
+
+  createStampElement(stamp, index, pageNum, overlay) {
     const stampElement = document.createElement("div");
     stampElement.className = "stamp";
     stampElement.dataset.index = index;
-    
-    // 添加拖拽相关的样式
+    stampElement.dataset.page = pageNum;
     stampElement.style.cursor = "move";
     stampElement.style.userSelect = "none";
 
     if (stamp.isCrossPage && stamp.image) {
-      // 骑缝章：使用canvas图像
       const canvas = document.createElement("canvas");
       canvas.width = stamp.image.width;
       canvas.height = stamp.image.height;
       const ctx = canvas.getContext("2d");
       ctx.drawImage(stamp.image, 0, 0);
       canvas.style.opacity = "0.8";
+      canvas.style.mixBlendMode = "multiply";
       canvas.style.width = "100%";
       canvas.style.height = "100%";
-      canvas.style.pointerEvents = "none"; // 防止canvas阻止事件
+      canvas.style.pointerEvents = "none";
       stampElement.appendChild(canvas);
     } else {
-      // 普通公章：使用img元素
       const img = document.createElement("img");
       img.src = stamp.src;
       img.style.opacity = "0.8";
-      img.style.pointerEvents = "none"; // 防止img阻止事件
+      img.style.mixBlendMode = "multiply";
+      img.style.pointerEvents = "none";
       img.style.userSelect = "none";
-      img.draggable = false; // 禁用默认拖拽
+      img.draggable = false;
       stampElement.appendChild(img);
+
+      const rotateHandle = document.createElement("div");
+      rotateHandle.className = "stamp-rotate-handle";
+      rotateHandle.title = "拖拽旋转印章（按住Shift以15°吸附）";
+      stampElement.appendChild(rotateHandle);
     }
 
     stampElement.style.left = stamp.x + "px";
@@ -376,142 +449,130 @@ class PDFStampTool {
     stampElement.style.width = stamp.width + "px";
     stampElement.style.height = stamp.height + "px";
 
-    // 点击选中印章
+    if (stamp.rotation && stamp.rotation !== 0) {
+      stampElement.style.transform = `rotate(${stamp.rotation}deg)`;
+    }
+
     stampElement.addEventListener("click", (e) => {
       e.stopPropagation();
-      this.selectStamp(index);
+      this.selectStamp(index, pageNum);
     });
-    
-    // 鼠标悬停效果
+
     stampElement.addEventListener("mouseenter", () => {
-      if (!this.isDragging) {
+      if (!this.isDragging && !this.isRotating) {
         stampElement.style.opacity = "0.9";
-        stampElement.style.transform = "scale(1.05)";
         stampElement.style.transition = "all 0.2s ease";
       }
     });
-    
+
     stampElement.addEventListener("mouseleave", () => {
-      if (!this.isDragging) {
+      if (!this.isDragging && !this.isRotating) {
         stampElement.style.opacity = "0.8";
-        stampElement.style.transform = "scale(1)";
       }
     });
 
-    this.elements.stampOverlay.appendChild(stampElement);
+    overlay.appendChild(stampElement);
   }
 
+  // ============= 添加印章 =============
   addStampToPage() {
     if (!this.stampImage || !this.pdfDoc) return;
 
     if (this.stampType === "cross") {
-      // 骑缝章模式：清空现有印章并生成骑缝章
       this.clearAllStamps();
       this.generateCrossPageStamps();
-    } else {
-      // 普通公章模式：在当前页面添加印章
-      const size = parseFloat(this.elements.stampSize.value);
-      const canvasRect = this.elements.canvas.getBoundingClientRect();
-      const stampWidth = canvasRect.width * size;
-      const stampHeight =
-        (stampWidth * this.stampImage.height) / this.stampImage.width;
-
-      // 计算居中位置
-      const x = Math.max(
-        0,
-        Math.min(
-          (canvasRect.width - stampWidth) / 2,
-          canvasRect.width - stampWidth
-        )
-      );
-      const y = Math.max(
-        0,
-        Math.min(
-          (canvasRect.height - stampHeight) / 2,
-          canvasRect.height - stampHeight
-        )
-      );
-
-      const stamp = {
-        src: this.stampImage.src,
-        x: x,
-        y: y,
-        width: stampWidth,
-        height: stampHeight,
-        originalWidth: this.stampImage.width,
-        originalHeight: this.stampImage.height,
-        isCrossPage: false,
-      };
-
-      if (!this.stamps[this.currentPage]) {
-        this.stamps[this.currentPage] = [];
-      }
-
-      this.stamps[this.currentPage].push(stamp);
-      this.renderStamps();
+      this.renderAllStamps();
       this.updateButtonStates();
-    }
-  }
-
-  handleCanvasClick(event) {
-    // 检查是否点击在已有印章上，如果是则不添加新印章
-    if (event.target.closest('.stamp')) {
       return;
     }
 
-    if (!this.stampImage || !this.pdfDoc) {
-      alert('请先上传PDF文件和印章图片');
-      return;
-    }
-
-    const rect = this.elements.canvas.getBoundingClientRect();
-    const x = event.clientX - rect.left;
-    const y = event.clientY - rect.top;
+    // 普通公章：添加到当前页
+    const canvas = this.getPageCanvas(this.currentPage);
+    if (!canvas) return;
 
     const size = parseFloat(this.elements.stampSize.value);
-    const stampWidth = rect.width * size;
-    const stampHeight =
-      (stampWidth * this.stampImage.height) / this.stampImage.width;
+    const canvasRect = canvas.getBoundingClientRect();
+    const stampWidth = canvasRect.width * size;
+    const stampHeight = (stampWidth * this.stampImage.height) / this.stampImage.width;
 
-    // 边界检查，确保印章完全在画布内
-    const finalX = Math.max(
-      0,
-      Math.min(x - stampWidth / 2, rect.width - stampWidth)
-    );
-    const finalY = Math.max(
-      0,
-      Math.min(y - stampHeight / 2, rect.height - stampHeight)
-    );
+    const x = Math.max(0, Math.min((canvasRect.width - stampWidth) / 2, canvasRect.width - stampWidth));
+    const y = Math.max(0, Math.min((canvasRect.height - stampHeight) / 2, canvasRect.height - stampHeight));
 
     const stamp = {
       src: this.stampImage.src,
-      x: finalX,
-      y: finalY,
-      width: stampWidth,
-      height: stampHeight,
+      x: x, y: y,
+      width: stampWidth, height: stampHeight,
       originalWidth: this.stampImage.width,
       originalHeight: this.stampImage.height,
+      rotation: 0,
+      isCrossPage: false,
     };
 
     if (!this.stamps[this.currentPage]) {
       this.stamps[this.currentPage] = [];
     }
-
     this.stamps[this.currentPage].push(stamp);
-    this.renderStamps();
+    this.renderPageStamps(this.currentPage);
     this.updateButtonStates();
-    
-    // 自动选中新添加的印章
-    const newStampIndex = this.stamps[this.currentPage].length - 1;
-    this.selectStamp(newStampIndex);
+    this.selectStamp(this.stamps[this.currentPage].length - 1, this.currentPage);
   }
 
+  handleCanvasClick(event) {
+    if (event.target.closest(".stamp")) return;
+    if (!this.stampImage || !this.pdfDoc) return;
+
+    const canvas = event.target.closest(".pdf-canvas");
+    if (!canvas) return;
+
+    const pageNum = parseInt(canvas.dataset.page);
+    const rect = canvas.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+
+    const size = parseFloat(this.elements.stampSize.value);
+    const stampWidth = rect.width * size;
+    const stampHeight = (stampWidth * this.stampImage.height) / this.stampImage.width;
+
+    const finalX = Math.max(0, Math.min(x - stampWidth / 2, rect.width - stampWidth));
+    const finalY = Math.max(0, Math.min(y - stampHeight / 2, rect.height - stampHeight));
+
+    const stamp = {
+      src: this.stampImage.src,
+      x: finalX, y: finalY,
+      width: stampWidth, height: stampHeight,
+      originalWidth: this.stampImage.width,
+      originalHeight: this.stampImage.height,
+      rotation: 0,
+    };
+
+    if (!this.stamps[pageNum]) {
+      this.stamps[pageNum] = [];
+    }
+    this.stamps[pageNum].push(stamp);
+    this.currentPage = pageNum;
+    this.renderPageStamps(pageNum);
+    this.updatePageInfo();
+    this.updateNavigationButtons();
+    this.updateButtonStates();
+    this.selectStamp(this.stamps[pageNum].length - 1, pageNum);
+  }
+
+  // ============= 拖拽 =============
   startDrag(event) {
     const stampElement = event.target.closest(".stamp");
     if (!stampElement) return;
 
+    const index = parseInt(stampElement.dataset.index);
+    const pageNum = parseInt(stampElement.dataset.page);
+
+    if (event.target.closest(".stamp-rotate-handle")) {
+      this.startRotate(event, stampElement, index, pageNum);
+      return;
+    }
+
     this.isDragging = true;
-    this.selectedStamp = parseInt(stampElement.dataset.index);
+    this.selectedStamp = index;
+    this.selectedPage = pageNum;
 
     const rect = stampElement.getBoundingClientRect();
     this.dragOffset = {
@@ -519,36 +580,30 @@ class PDFStampTool {
       y: event.clientY - rect.top,
     };
 
-    // 拖拽时的视觉效果
     stampElement.style.opacity = "0.7";
     stampElement.style.transform = "scale(1.1)";
     stampElement.style.zIndex = "1000";
-    stampElement.style.transition = "none"; // 拖拽时禁用过渡动画
-    
-    // 改变鼠标样式
+    stampElement.style.transition = "none";
     document.body.style.cursor = "grabbing";
 
-    this.selectStamp(this.selectedStamp);
+    this.selectStamp(this.selectedStamp, pageNum);
     event.preventDefault();
   }
 
   drag(event) {
-    if (!this.isDragging || this.selectedStamp === null) return;
+    if (!this.isDragging || this.selectedStamp === null || this.selectedPage === null) return;
 
-    const canvasRect = this.elements.canvas.getBoundingClientRect();
-    const stamp = this.stamps[this.currentPage][this.selectedStamp];
+    const canvas = this.getPageCanvas(this.selectedPage);
+    if (!canvas) return;
+
+    const canvasRect = canvas.getBoundingClientRect();
+    const stamp = this.stamps[this.selectedPage][this.selectedStamp];
 
     const newX = event.clientX - canvasRect.left - this.dragOffset.x;
     const newY = event.clientY - canvasRect.top - this.dragOffset.y;
 
     if (stamp.isCrossPage) {
-      // 骑缝章：只允许垂直移动，并同步所有页面的骑缝章位置
-      const newYPosition = Math.max(
-        0,
-        Math.min(newY, canvasRect.height - stamp.height)
-      );
-
-      // 同步更新所有页面的骑缝章位置
+      const newYPosition = Math.max(0, Math.min(newY, canvasRect.height - stamp.height));
       for (let pageNum = 1; pageNum <= this.totalPages; pageNum++) {
         const pageStamps = this.stamps[pageNum];
         if (pageStamps) {
@@ -559,59 +614,180 @@ class PDFStampTool {
           });
         }
       }
-      // x坐标保持不变（固定在右边）
     } else {
-      // 普通公章：允许自由移动
       stamp.x = Math.max(0, Math.min(newX, canvasRect.width - stamp.width));
       stamp.y = Math.max(0, Math.min(newY, canvasRect.height - stamp.height));
     }
 
-    this.renderStamps();
-    this.selectStamp(this.selectedStamp);
+    this.renderAllStamps();
+    this.selectStamp(this.selectedStamp, this.selectedPage);
   }
 
   endDrag() {
     if (this.isDragging && this.selectedStamp !== null) {
-      // 恢复被拖拽印章的样式
-      const stampElements = this.elements.stampOverlay.querySelectorAll('.stamp');
-      const draggedElement = stampElements[this.selectedStamp];
-      
-      if (draggedElement) {
-        draggedElement.style.opacity = "0.8";
-        draggedElement.style.transform = "scale(1)";
-        draggedElement.style.zIndex = "auto";
-        draggedElement.style.transition = "all 0.2s ease";
+      const overlay = this.getPageOverlay(this.selectedPage);
+      if (overlay) {
+        const stampElements = overlay.querySelectorAll(".stamp");
+        const draggedElement = stampElements[this.selectedStamp];
+        if (draggedElement) {
+          draggedElement.style.opacity = "0.8";
+          const stamp = this.stamps[this.selectedPage][this.selectedStamp];
+          if (stamp.rotation && stamp.rotation !== 0) {
+            draggedElement.style.transform = `rotate(${stamp.rotation}deg)`;
+          } else {
+            draggedElement.style.transform = "";
+          }
+          draggedElement.style.zIndex = "auto";
+          draggedElement.style.transition = "all 0.2s ease";
+        }
       }
-      
-      // 恢复鼠标样式
       document.body.style.cursor = "auto";
     }
-    
     this.isDragging = false;
   }
 
-  selectStamp(index) {
+  // ============= 旋转 =============
+  startRotate(event, stampElement, index, pageNum) {
+    this.isRotating = true;
     this.selectedStamp = index;
+    this.selectedPage = pageNum;
 
-    // 更新视觉选择状态
-    document.querySelectorAll(".stamp").forEach((el, i) => {
-      el.classList.toggle("selected", i === index);
+    const stampRect = stampElement.getBoundingClientRect();
+    this.rotateCenter = {
+      x: stampRect.left + stampRect.width / 2,
+      y: stampRect.top + stampRect.height / 2,
+    };
+
+    const stamp = this.stamps[pageNum][index];
+    const mouseAngle = Math.atan2(
+      event.clientY - this.rotateCenter.y,
+      event.clientX - this.rotateCenter.x
+    );
+    this.rotateStartAngle = (stamp.rotation || 0) - (mouseAngle * 180) / Math.PI;
+
+    stampElement.style.transition = "none";
+    stampElement.style.zIndex = "1000";
+    document.body.style.cursor = "grabbing";
+
+    this.selectStamp(this.selectedStamp, pageNum);
+    event.preventDefault();
+    event.stopPropagation();
+  }
+
+  rotate(event) {
+    if (!this.isRotating || this.selectedStamp === null || this.selectedPage === null) return;
+
+    const stamp = this.stamps[this.selectedPage][this.selectedStamp];
+    if (stamp.isCrossPage) return;
+
+    const mouseAngle = Math.atan2(
+      event.clientY - this.rotateCenter.y,
+      event.clientX - this.rotateCenter.x
+    );
+    let newRotation = this.rotateStartAngle + (mouseAngle * 180) / Math.PI;
+
+    if (event.shiftKey) {
+      newRotation = Math.round(newRotation / 15) * 15;
+    }
+
+    stamp.rotation = newRotation;
+
+    const overlay = this.getPageOverlay(this.selectedPage);
+    if (overlay) {
+      const stampElements = overlay.querySelectorAll(".stamp");
+      const el = stampElements[this.selectedStamp];
+      if (el) {
+        el.style.transform = `rotate(${stamp.rotation}deg)`;
+      }
+    }
+  }
+
+  endRotate() {
+    if (this.isRotating && this.selectedStamp !== null) {
+      const overlay = this.getPageOverlay(this.selectedPage);
+      if (overlay) {
+        const stampElements = overlay.querySelectorAll(".stamp");
+        const el = stampElements[this.selectedStamp];
+        if (el) {
+          el.style.transition = "all 0.2s ease";
+          el.style.zIndex = "auto";
+        }
+      }
+      document.body.style.cursor = "auto";
+    }
+    this.isRotating = false;
+  }
+
+  // ============= 选择与管理 =============
+  selectStamp(index, pageNum) {
+    this.selectedStamp = index;
+    this.selectedPage = pageNum;
+    this.currentPage = pageNum;
+
+    // 清除所有选择
+    document.querySelectorAll(".stamp").forEach((el) => {
+      el.classList.remove("selected");
     });
 
-    // 更新印章列表选择状态
-    document.querySelectorAll(".stamp-list li").forEach((el, i) => {
-      el.classList.toggle("selected", i === index);
-    });
+    // 设置当前选中的印章
+    const overlay = this.getPageOverlay(pageNum);
+    if (overlay) {
+      const stampElements = overlay.querySelectorAll(".stamp");
+      if (stampElements[index]) {
+        stampElements[index].classList.add("selected");
+      }
+    }
 
+    // 同步旋转输入框
+    if (this.selectedStamp !== null && this.stamps[pageNum]) {
+      const stamp = this.stamps[pageNum][this.selectedStamp];
+      if (this.elements.stampRotation) {
+        this.elements.stampRotation.value = stamp.rotation || 0;
+      }
+    }
+
+    this.updatePageInfo();
+    this.updateNavigationButtons();
+    this.updateStampList();
     this.elements.deleteStamp.disabled = false;
   }
 
-  deleteSelectedStamp() {
-    if (this.selectedStamp === null || !this.stamps[this.currentPage]) return;
+  updateSelectedStampRotation() {
+    if (this.selectedStamp === null || this.selectedPage === null) return;
+    if (!this.stamps[this.selectedPage]) return;
 
-    this.stamps[this.currentPage].splice(this.selectedStamp, 1);
+    const stamp = this.stamps[this.selectedPage][this.selectedStamp];
+    if (stamp.isCrossPage) return;
+
+    const newRotation = parseFloat(this.elements.stampRotation.value) || 0;
+    stamp.rotation = newRotation;
+
+    const overlay = this.getPageOverlay(this.selectedPage);
+    if (overlay) {
+      const stampElements = overlay.querySelectorAll(".stamp");
+      const el = stampElements[this.selectedStamp];
+      if (el) {
+        el.style.transform = newRotation !== 0 ? `rotate(${newRotation}deg)` : "";
+      }
+    }
+  }
+
+  deleteSelectedStamp() {
+    if (this.selectedStamp === null || this.selectedPage === null) return;
+    if (!this.stamps[this.selectedPage]) return;
+
+    const stamp = this.stamps[this.selectedPage][this.selectedStamp];
+
+    // 骑缝章：删除所有页的骑缝章
+    if (stamp && stamp.isCrossPage) {
+      this.clearCrossPageStamps();
+      return;
+    }
+
+    this.stamps[this.selectedPage].splice(this.selectedStamp, 1);
     this.selectedStamp = null;
-    this.renderStamps();
+    this.selectedPage = null;
+    this.renderAllStamps();
     this.updateButtonStates();
   }
 
@@ -619,86 +795,66 @@ class PDFStampTool {
     if (this.stamps[this.currentPage]) {
       this.stamps[this.currentPage] = [];
       this.selectedStamp = null;
-      this.renderStamps();
+      this.selectedPage = null;
+      this.renderPageStamps(this.currentPage);
+      this.updateStampList();
       this.updateButtonStates();
     }
   }
 
-  // 清空所有页面的印章
   clearAllStamps() {
     this.stamps = {};
     this.crossPageStamps = [];
     this.selectedStamp = null;
-    this.renderStamps();
+    this.selectedPage = null;
+    this.renderAllStamps();
     this.updateButtonStates();
   }
 
-  // 只清除骑缝章，保留普通公章
   clearCrossPageStamps() {
-    // 清空骑缝章数组
     this.crossPageStamps = [];
-
-    // 遍历所有页面，只移除骑缝章
     for (let pageNum in this.stamps) {
       this.stamps[pageNum] = this.stamps[pageNum].filter(
         (stamp) => !stamp.isCrossPage
       );
     }
-
     this.selectedStamp = null;
-    this.renderStamps();
+    this.selectedPage = null;
+    this.renderAllStamps();
     this.updateButtonStates();
   }
 
-  // 生成骑缝章分割片段
+  // ============= 骑缝章 =============
   generateCrossPageStamps() {
     if (!this.stampImage || !this.totalPages) return;
 
-    this.crossPageStamps = this.splitStampImage(
-      this.stampImage,
-      this.totalPages
-    );
+    this.crossPageStamps = this.splitStampImage(this.stampImage, this.totalPages);
     this.addCrossPageStampsToPages();
   }
 
-  // 分割印章图片
   splitStampImage(stampImg, pageCount) {
-    const canvas = document.createElement("canvas");
-    const ctx = canvas.getContext("2d");
-
     const stampWidth = stampImg.width;
     const stampHeight = stampImg.height;
     const segmentWidth = stampWidth / pageCount;
-
     const segments = [];
 
     for (let i = 0; i < pageCount; i++) {
       const segmentCanvas = document.createElement("canvas");
       const segmentCtx = segmentCanvas.getContext("2d");
-
       segmentCanvas.width = segmentWidth;
       segmentCanvas.height = stampHeight;
-
-      // 绘制当前片段
       segmentCtx.drawImage(
         stampImg,
-        i * segmentWidth,
-        0,
-        segmentWidth,
-        stampHeight,
-        0,
-        0,
-        segmentWidth,
-        stampHeight
+        i * segmentWidth, 0,
+        segmentWidth, stampHeight,
+        0, 0,
+        segmentWidth, stampHeight
       );
-
       segments.push(segmentCanvas);
     }
-
     return segments;
   }
 
-  // 将骑缝章片段添加到各页面
   addCrossPageStampsToPages() {
     if (!this.crossPageStamps.length) return;
 
@@ -711,80 +867,136 @@ class PDFStampTool {
       if (segmentIndex < this.crossPageStamps.length) {
         const segment = this.crossPageStamps[segmentIndex];
 
-        // 计算印章在页面右边的位置
-        const canvasRect = this.elements.canvas.getBoundingClientRect();
+        // 使用第一页的canvas尺寸作为参考（所有页相同尺寸）
+        const canvas = this.getPageCanvas(1);
+        if (!canvas) continue;
+        const canvasRect = canvas.getBoundingClientRect();
         const stampSize = parseFloat(this.elements.stampSize.value);
-        // 使用与普通公章相同的比例计算方式
         const stampWidth = (canvasRect.width * stampSize) / this.totalPages;
         const stampHeight = (stampWidth * segment.height) / segment.width;
 
         const stamp = {
-          x: canvasRect.width - stampWidth, // 右边顶格，不留边距
-          y: (canvasRect.height - stampHeight) / 2, // 默认放在页面中间
+          x: canvasRect.width - stampWidth,
+          y: (canvasRect.height - stampHeight) / 2,
           width: stampWidth,
           height: stampHeight,
           image: segment,
           isCrossPage: true,
+          rotation: 0,
           segmentIndex: segmentIndex,
         };
 
         this.stamps[pageNum].push(stamp);
       }
     }
-
-    this.renderStamps();
-    this.updateButtonStates();
   }
 
-  updateStampList() {
-    const list = this.elements.stampList;
-    list.innerHTML = "";
-
-    const pageStamps = this.stamps[this.currentPage] || [];
-    pageStamps.forEach((stamp, index) => {
-      const li = document.createElement("li");
-      li.textContent = `印章 ${index + 1}`;
-      li.addEventListener("click", () => this.selectStamp(index));
-      list.appendChild(li);
-    });
-  }
-
-  previousPage() {
+  // ============= 导航与滚动 =============
+  scrollToPrevPage() {
     if (this.currentPage > 1) {
       this.currentPage--;
-      this.selectedStamp = null;
-      this.updatePageInfo();
-      this.updateNavigationButtons();
-      this.renderPage();
+      this.scrollToPage(this.currentPage);
     }
   }
 
-  nextPage() {
+  scrollToNextPage() {
     if (this.currentPage < this.totalPages) {
       this.currentPage++;
-      this.selectedStamp = null;
-      this.updatePageInfo();
-      this.updateNavigationButtons();
-      this.renderPage();
+      this.scrollToPage(this.currentPage);
     }
   }
 
+  scrollToPage(pageNum) {
+    const pageItem = this.getPageItem(pageNum);
+    if (pageItem && this.elements.previewScroll) {
+      const containerRect = this.elements.previewScroll.getBoundingClientRect();
+      const itemRect = pageItem.getBoundingClientRect();
+      const scrollTop =
+        this.elements.previewScroll.scrollTop +
+        (itemRect.top - containerRect.top) -
+        20;
+      this.elements.previewScroll.scrollTo({
+        top: scrollTop,
+        behavior: "smooth",
+      });
+    }
+    this.updatePageInfo();
+    this.updateNavigationButtons();
+  }
+
+  onPreviewScroll() {
+    // 根据滚动位置判断当前在查看哪一页
+    const container = this.elements.previewScroll;
+    if (!container) return;
+
+    const containerRect = container.getBoundingClientRect();
+    const containerMid = containerRect.top + containerRect.height / 2;
+
+    let closestPage = 1;
+    let closestDist = Infinity;
+
+    for (let pageNum = 1; pageNum <= this.totalPages; pageNum++) {
+      const pageItem = this.getPageItem(pageNum);
+      if (!pageItem) continue;
+
+      const rect = pageItem.getBoundingClientRect();
+      const pageMid = rect.top + rect.height / 2;
+      const dist = Math.abs(pageMid - containerMid);
+
+      if (dist < closestDist) {
+        closestDist = dist;
+        closestPage = pageNum;
+      }
+    }
+
+    if (closestPage !== this.currentPage) {
+      this.currentPage = closestPage;
+      this.updatePageInfo();
+      this.updateNavigationButtons();
+      this.updateStampList();
+    }
+  }
+
+  // ============= 缩放 =============
   zoomIn() {
     this.scale = Math.min(this.scale * 1.2, 3.0);
     this.updateZoomLevel();
-    this.renderPage();
+    this.rerenderAfterZoom();
   }
 
   zoomOut() {
     this.scale = Math.max(this.scale / 1.2, 0.5);
     this.updateZoomLevel();
-    this.renderPage();
+    this.rerenderAfterZoom();
+  }
+
+  async rerenderAfterZoom() {
+    if (!this.pdfDoc) return;
+
+    this.selectedStamp = null;
+    this.selectedPage = null;
+
+    // 记录当前滚动位置比例
+    const container = this.elements.previewScroll;
+    const scrollRatio = container
+      ? container.scrollTop / (container.scrollHeight - container.clientHeight || 1)
+      : 0;
+
+    await this.renderAllPages();
+
+    // 恢复滚动位置
+    if (container) {
+      container.scrollTop = scrollRatio * (container.scrollHeight - container.clientHeight);
+    }
+
+    this.updateButtonStates();
   }
 
   updateZoomLevel() {
     this.elements.zoomLevel.textContent = Math.round(this.scale * 100) + "%";
   }
 
+  // ============= UI 更新 =============
   updatePageInfo() {
     this.elements.pageInfo.textContent = `${this.currentPage} / ${this.totalPages}`;
   }
@@ -794,6 +1006,23 @@ class PDFStampTool {
     this.elements.nextPage.disabled = this.currentPage >= this.totalPages;
   }
 
+  updateStampList() {
+    const list = this.elements.stampList;
+    list.innerHTML = "";
+
+    const pageStamps = this.stamps[this.currentPage] || [];
+    pageStamps.forEach((stamp, index) => {
+      const li = document.createElement("li");
+      const typeLabel = stamp.isCrossPage ? "骑缝章" : "印章";
+      li.textContent = `${typeLabel} ${index + 1}`;
+      li.addEventListener("click", () => this.selectStamp(index, this.currentPage));
+      if (this.selectedStamp === index && this.selectedPage === this.currentPage) {
+        li.classList.add("selected");
+      }
+      list.appendChild(li);
+    });
+  }
+
   updateButtonStates() {
     const hasStamps =
       this.stamps[this.currentPage] && this.stamps[this.currentPage].length > 0;
@@ -801,6 +1030,7 @@ class PDFStampTool {
     this.elements.deleteStamp.disabled = this.selectedStamp === null;
   }
 
+  // ============= 保存PDF =============
   async savePDF() {
     if (!this.pdfDoc) return;
 
@@ -808,11 +1038,8 @@ class PDFStampTool {
     this.updateProgress(0, "开始处理PDF...");
 
     try {
-      // 使用jsPDF创建新的PDF
       const { jsPDF } = window.jspdf;
       const pdf = new jsPDF();
-
-      // 删除默认页面
       pdf.deletePage(1);
 
       for (let pageNum = 1; pageNum <= this.totalPages; pageNum++) {
@@ -822,30 +1049,36 @@ class PDFStampTool {
         );
 
         const page = await this.pdfDoc.getPage(pageNum);
-        const viewport = page.getViewport({ scale: 2.0 }); // 高分辨率
+        const viewport = page.getViewport({ scale: 2.0 });
 
-        // 创建临时画布
         const canvas = document.createElement("canvas");
         canvas.width = viewport.width;
         canvas.height = viewport.height;
         const context = canvas.getContext("2d");
 
-        // 渲染PDF页面
         await page.render({
           canvasContext: context,
           viewport: viewport,
         }).promise;
 
-        // 添加印章
+        // 获取预览canvas尺寸用于缩放比例计算
+        const previewPageItem = this.getPageItem(pageNum);
+        const previewCanvas = previewPageItem
+          ? previewPageItem.querySelector(".pdf-canvas")
+          : null;
+        const previewWidth = previewCanvas
+          ? previewCanvas.getBoundingClientRect().width
+          : viewport.width / 2;
+
+        const scaleRatio = viewport.width / (previewWidth || 1);
+
         const pageStamps = this.stamps[pageNum] || [];
         for (const stamp of pageStamps) {
           let imageSource;
 
           if (stamp.isCrossPage && stamp.image) {
-            // 骑缝章：直接使用canvas图像
             imageSource = stamp.image;
           } else {
-            // 普通公章：创建img元素
             imageSource = new Image();
             imageSource.src = stamp.src;
             await new Promise((resolve) => {
@@ -853,40 +1086,38 @@ class PDFStampTool {
             });
           }
 
-          // 计算印章在高分辨率画布上的位置和尺寸
-          const scaleRatio = viewport.width / (this.elements.canvas.width || 1);
           const stampX = stamp.x * scaleRatio;
           const stampY = stamp.y * scaleRatio;
           const stampWidth = stamp.width * scaleRatio;
           const stampHeight = stamp.height * scaleRatio;
 
-          // 边界检查
-          const finalX = Math.max(
-            0,
-            Math.min(stampX, viewport.width - stampWidth)
-          );
-          const finalY = Math.max(
-            0,
-            Math.min(stampY, viewport.height - stampHeight)
-          );
+          const finalX = Math.max(0, Math.min(stampX, viewport.width - stampWidth));
+          const finalY = Math.max(0, Math.min(stampY, viewport.height - stampHeight));
           const finalWidth = Math.min(stampWidth, viewport.width - finalX);
           const finalHeight = Math.min(stampHeight, viewport.height - finalY);
 
-          // 设置透明度并绘制印章
+          const centerX = finalX + finalWidth / 2;
+          const centerY = finalY + finalHeight / 2;
+
           context.globalAlpha = 0.8;
-          context.drawImage(
-            imageSource,
-            finalX,
-            finalY,
-            finalWidth,
-            finalHeight
-          );
+          context.globalCompositeOperation = "multiply";
+
+          if (stamp.rotation && stamp.rotation !== 0 && !stamp.isCrossPage) {
+            context.save();
+            context.translate(centerX, centerY);
+            context.rotate((stamp.rotation * Math.PI) / 180);
+            context.drawImage(imageSource, -finalWidth / 2, -finalHeight / 2, finalWidth, finalHeight);
+            context.restore();
+          } else {
+            context.drawImage(imageSource, finalX, finalY, finalWidth, finalHeight);
+          }
+
+          context.globalCompositeOperation = "source-over";
           context.globalAlpha = 1.0;
         }
 
-        // 将画布添加到PDF
         const imgData = canvas.toDataURL("image/jpeg", 0.95);
-        const pdfWidth = 210; // A4宽度(mm)
+        const pdfWidth = 210;
         const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
 
         pdf.addPage([pdfWidth, pdfHeight]);
@@ -895,7 +1126,6 @@ class PDFStampTool {
 
       this.updateProgress(100, "生成PDF文件...");
 
-      // 保存PDF
       const fileName =
         this.elements.pdfName.textContent.replace(".pdf", "") + "_stamped.pdf";
       pdf.save(fileName);
